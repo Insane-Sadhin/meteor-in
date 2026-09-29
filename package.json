@@ -1,8 +1,8 @@
 {
-  "name": "project meteor",
+  "name": "meteor-in",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "METEOR-IN: National Weather Data Intelligence Platform for India",
+  "main": "src/server/index.ts",
   "scripts": {
     "start": "node src/server/index.ts",
     "build": "vite build",
@@ -10,16 +10,9 @@
     "serve": "node src/server/index.ts",
     "test": "node src/server/testSuite.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.19.0",
-      "onFail": "download"
-    }
-  },
+  "keywords": ["weather", "meteorology", "india", "real-time", "gis"],
+  "author": "Insane-Sadhin",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
