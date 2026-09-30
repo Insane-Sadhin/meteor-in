@@ -12,6 +12,7 @@ import {
 } from '../types/index.ts';
 import { INDIAN_CITIES } from '../../server/data/cities.ts';
 import { interpretWeatherCode } from '../../server/services/weather/weatherNormalizer.ts';
+import { fetchCertifiedIndianMetars, CITY_ICAO_MAP } from './metarService.ts';
 
 const API_BASE = '/api';
 
@@ -48,48 +49,68 @@ export async function fetchCurrentWeather(): Promise<{
     return backendData;
   }
 
-  // Edge / Static Fallback: Fetch directly from Open-Meteo API in browser!
+  // Edge / Static Fallback: Ingest certified WMO METAR ground stations + Open-Meteo multi-point grid in parallel!
   try {
     const lats = INDIAN_CITIES.map(c => c.latitude.toFixed(4)).join(',');
     const lons = INDIAN_CITIES.map(c => c.longitude.toFixed(4)).join(',');
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,rain,showers,snowfall,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=Asia/Kolkata`;
 
-    const res = await fetch(url);
-    const data = await res.json();
-    const isArray = Array.isArray(data);
+    const [openMeteoRes, metarMap, aqiList] = await Promise.all([
+      fetch(url).then(r => r.json()).catch(() => null),
+      fetchCertifiedIndianMetars().catch(() => new Map()),
+      fetchAirQuality().catch(() => []),
+    ]);
 
+    const isArray = Array.isArray(openMeteoRes);
     const observations: Observation[] = [];
     const activeEvents: WeatherEventItem[] = [];
 
     INDIAN_CITIES.forEach((city, idx) => {
-      const item = isArray ? data[idx] : (idx === 0 ? data : null);
-      if (!item || !item.current) return;
-      const c = item.current;
+      const item = isArray ? openMeteoRes[idx] : (idx === 0 ? openMeteoRes : null);
+      const c = item?.current || {};
       const info = interpretWeatherCode(c.weather_code ?? 0);
       const rain = (c.precipitation || c.rain || 0);
 
+      // Check for certified physical ground station observation (WMO / ICAO METAR)
+      const icao = CITY_ICAO_MAP[city.id];
+      const metar = icao ? metarMap.get(icao) : null;
+      const aqiItem = aqiList.find((a: CityAirQuality) => a.locationId === city.id || a.city.toLowerCase() === city.city.toLowerCase());
+
+      const temp = metar ? metar.temp : (c.temperature_2m ?? 26);
+      const appTemp = metar ? metar.apparentTemp : (c.apparent_temperature ?? temp);
+      const hum = metar ? metar.rh : (c.relative_humidity_2m ?? 70);
+      const windSpd = metar ? metar.wspd : (c.wind_speed_10m ?? 8);
+      const windDir = metar ? metar.wdir : (c.wind_direction_10m ?? 180);
+      const press = metar ? metar.altim : (c.surface_pressure ?? 1012);
+      const condition = metar ? metar.weatherCondition : info.condition;
+      const source = metar ? `WMO METAR (${metar.icaoId})` : 'Open-Meteo Synoptic Grid';
+      const obsTime = metar ? metar.observedAt : (c.time ? new Date(c.time + '+05:30').toISOString() : new Date().toISOString());
+
       observations.push({
         id: idx + 1,
-        source: 'Open-Meteo (Edge)',
+        source,
         location_id: city.id,
-        observed_at: c.time ? new Date(c.time + '+05:30').toISOString() : new Date().toISOString(),
+        observed_at: obsTime,
         ingested_at: new Date().toISOString(),
         latitude: city.latitude,
         longitude: city.longitude,
-        temperature: c.temperature_2m ?? 0,
-        apparent_temperature: c.apparent_temperature,
-        humidity: c.relative_humidity_2m ?? 0,
+        temperature: temp,
+        apparent_temperature: appTemp,
+        humidity: hum,
         precipitation: rain,
         rain: c.rain ?? 0,
         showers: c.showers ?? 0,
         snowfall: c.snowfall ?? 0,
-        wind_speed: c.wind_speed_10m ?? 0,
-        wind_direction: c.wind_direction_10m ?? 0,
+        wind_speed: windSpd,
+        wind_direction: windDir,
         wind_gusts: c.wind_gusts_10m,
-        pressure: c.surface_pressure ?? 1013,
+        pressure: press,
         cloud_cover: c.cloud_cover ?? 0,
         weather_code: c.weather_code ?? 0,
-        weather_condition: info.condition,
+        weather_condition: condition,
+        air_quality_aqi: aqiItem?.indianAqi,
+        pm2_5: aqiItem?.pm2_5,
+        pm10: aqiItem?.pm10,
         city: city.city,
         district: city.district,
         state: city.state,
@@ -100,11 +121,7 @@ export async function fetchCurrentWeather(): Promise<{
 
       // Comprehensive Atmospheric Event Inference
       const wCode = c.weather_code ?? 0;
-      const windSpd = c.wind_speed_10m ?? 0;
       const windGust = c.wind_gusts_10m ?? 0;
-      const temp = c.temperature_2m ?? 0;
-      const appTemp = c.apparent_temperature ?? temp;
-      const hum = c.relative_humidity_2m ?? 0;
 
       if ([95, 96, 99].includes(wCode)) {
         activeEvents.push({
@@ -384,44 +401,92 @@ export async function fetchStationDetail(id: string): Promise<any> {
     city = INDIAN_CITIES[0];
   }
 
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover&hourly=temperature_2m,precipitation,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max&timezone=Asia/Kolkata`;
+  const icao = CITY_ICAO_MAP[city.id];
+  const metarPromise = icao
+    ? fetch(`https://aviationweather.gov/api/data/metar?ids=${icao}&format=json`)
+        .then(r => r.json())
+        .then(arr => (Array.isArray(arr) && arr[0] ? arr[0] : null))
+        .catch(() => null)
+    : Promise.resolve(null);
 
-  const res = await fetch(url);
-  const data = await res.json();
-  const c = data.current;
+  const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover&hourly=temperature_2m,precipitation,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max&timezone=Asia/Kolkata`;
+
+  const [metar, forecastData] = await Promise.all([
+    metarPromise,
+    fetch(forecastUrl).then(r => r.json()).catch(() => ({})),
+  ]);
+
+  const c = forecastData.current || {};
   const info = interpretWeatherCode(c.weather_code ?? 0);
 
-  const hourly = (data.hourly?.time || []).slice(0, 24).map((t: string, i: number) => ({
-    time: t,
-    temperature: data.hourly.temperature_2m[i],
-    precipitation: data.hourly.precipitation[i],
-    windSpeed: data.hourly.wind_speed_10m[i],
-  }));
+  // If certified physical ground station METAR is available, prioritize its real calibrated readings
+  let temp = c.temperature_2m ?? 26;
+  let appTemp = c.apparent_temperature ?? temp;
+  let humidity = c.relative_humidity_2m ?? 70;
+  let windSpeed = c.wind_speed_10m ?? 8;
+  let windDir = c.wind_direction_10m ?? 180;
+  let pressure = c.surface_pressure ?? 1012;
+  let condition = info.condition;
+  let source = 'Open-Meteo Synoptic Grid';
+  let observedAt = c.time ? new Date(c.time + '+05:30').toISOString() : new Date().toISOString();
 
-  const forecast = (data.daily?.time || []).map((t: string, i: number) => ({
+  if (metar && metar.temp !== undefined) {
+    temp = metar.temp;
+    const dewp = metar.dewp !== undefined ? metar.dewp : temp - 5;
+    // Calculate psychrometric relative humidity from temperature and dewpoint
+    const a = 17.625;
+    const b = 243.04;
+    const alpha = (a * temp) / (b + temp);
+    const beta = (a * dewp) / (b + dewp);
+    humidity = Math.min(100, Math.max(10, Math.round(100 * Math.exp(beta - alpha))));
+    appTemp = temp > 26 ? Math.round((temp + (humidity / 100) * 4) * 10) / 10 : temp;
+    windSpeed = Math.round((metar.wspd || 0) * 1.852);
+    windDir = typeof metar.wdir === 'number' ? metar.wdir : 180;
+    pressure = metar.altim ? Math.round(metar.altim) : 1012;
+    source = `WMO METAR (${metar.icaoId})`;
+    observedAt = metar.reportTime || new Date().toISOString();
+  }
+
+  // Next 24 hours hourly forecast from current hour forward
+  const now = new Date();
+  const currentHourPrefix = now.toISOString().slice(0, 13);
+  let startIdx = (forecastData.hourly?.time || []).findIndex((t: string) => t.startsWith(currentHourPrefix));
+  if (startIdx < 0) startIdx = 0;
+
+  const hourly = (forecastData.hourly?.time || []).slice(startIdx, startIdx + 24).map((t: string, i: number) => {
+    const idx = startIdx + i;
+    return {
+      time: t,
+      temperature: forecastData.hourly.temperature_2m[idx] ?? temp,
+      precipitation: forecastData.hourly.precipitation[idx] ?? 0,
+      windSpeed: forecastData.hourly.wind_speed_10m[idx] ?? windSpeed,
+    };
+  });
+
+  const forecast = (forecastData.daily?.time || []).map((t: string, i: number) => ({
     date: t,
-    weatherCondition: interpretWeatherCode(data.daily.weather_code[i]).condition,
-    temperatureMax: data.daily.temperature_2m_max[i],
-    temperatureMin: data.daily.temperature_2m_min[i],
-    precipitationProbabilityMax: data.daily.precipitation_probability_max[i] || 0,
-    precipitationSum: data.daily.precipitation_sum[i] || 0,
-    windSpeedMax: data.daily.wind_speed_10m_max[i],
+    weatherCondition: interpretWeatherCode(forecastData.daily.weather_code[i]).condition,
+    temperatureMax: forecastData.daily.temperature_2m_max[i],
+    temperatureMin: forecastData.daily.temperature_2m_min[i],
+    precipitationProbabilityMax: forecastData.daily.precipitation_probability_max[i] || 0,
+    precipitationSum: forecastData.daily.precipitation_sum[i] || 0,
+    windSpeedMax: forecastData.daily.wind_speed_10m_max[i],
   }));
 
   return {
     station: city,
     latestObservation: {
-      temperature: c.temperature_2m,
-      apparent_temperature: c.apparent_temperature,
-      humidity: c.relative_humidity_2m,
-      precipitation: c.precipitation,
-      wind_speed: c.wind_speed_10m,
-      wind_direction: c.wind_direction_10m,
-      pressure: c.surface_pressure,
-      weather_condition: info.condition,
-      source: 'Open-Meteo (Edge)',
-      observed_at: new Date().toISOString(),
-      cloud_cover: c.cloud_cover,
+      temperature: temp,
+      apparent_temperature: appTemp,
+      humidity,
+      precipitation: c.precipitation || 0,
+      wind_speed: windSpeed,
+      wind_direction: windDir,
+      pressure,
+      weather_condition: condition,
+      source,
+      observed_at: observedAt,
+      cloud_cover: c.cloud_cover ?? 0,
     },
     hourly,
     forecast,

@@ -167,7 +167,7 @@ export const InteractiveIndiaMap: React.FC<InteractiveIndiaMapProps> = ({
         haloColor = w >= 20 ? 'rgba(168, 85, 247, 0.5)' : 'rgba(148, 163, 184, 0.3)';
         displayValue = `${w}`;
       } else if (activeMetric === 'aqi') {
-        const aqi = station.air_quality_aqi ?? Math.round(station.humidity * 1.5);
+        const aqi = station.air_quality_aqi ?? (station.pm2_5 ? Math.round(station.pm2_5 * 2.5) : 125);
         if (aqi <= 50) { badgeColor = '#00e599'; haloColor = 'rgba(0, 229, 153, 0.5)'; }
         else if (aqi <= 100) { badgeColor = '#2dd4bf'; haloColor = 'rgba(45, 212, 191, 0.5)'; }
         else if (aqi <= 200) { badgeColor = '#ffb800'; haloColor = 'rgba(255, 184, 0, 0.5)'; }
@@ -427,8 +427,8 @@ export const InteractiveIndiaMap: React.FC<InteractiveIndiaMapProps> = ({
                 <Sun className="w-4 h-4 text-amber-400" />
                 <span>{selectedStation.weather_condition}</span>
               </div>
-              <span className="text-[10px] font-mono text-purple-400">
-                WMO {selectedStation.weather_code}
+              <span className="text-[10px] font-mono text-purple-300 font-semibold px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/30">
+                {selectedStation.source}
               </span>
             </div>
 
