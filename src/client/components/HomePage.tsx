@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Observation, WeatherEventItem, CitizenReportItem, DataSourceItem } from '../types/index.ts';
 import { InteractiveIndiaMap } from './InteractiveIndiaMap.tsx';
 import { soundFx } from '../utils/soundEffects.ts';
+import { searchIndianCities, GeocodedCityResult } from '../utils/citySearch.ts';
 import {
   Globe,
   Radio,
@@ -20,6 +21,9 @@ import {
   Eye,
   CheckCircle2,
   AlertTriangle,
+  Search,
+  Loader2,
+  X,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -43,6 +47,58 @@ export const HomePage: React.FC<HomePageProps> = ({
   onNavigateToOperations,
   onOpenReportModal,
 }) => {
+  const [selectedStationId, setSelectedStationId] = useState<string | null>('delhi');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<GeocodedCityResult[]>([]);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+
+  // Debounced live city search in hero
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const results = await searchIndianCities(searchQuery);
+        setSearchResults(results);
+        setIsSearchOpen(true);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 280);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSelectCity = (stationId: string) => {
+    soundFx.playClick();
+    setSelectedStationId(stationId);
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    const el = document.getElementById('interactive-map');
+    el?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const keyCities = [
+    { id: 'delhi', name: 'Delhi' },
+    { id: 'mumbai', name: 'Mumbai' },
+    { id: 'bengaluru', name: 'Bengaluru' },
+    { id: 'kolkata', name: 'Kolkata' },
+    { id: 'chennai', name: 'Chennai' },
+    { id: 'hyderabad', name: 'Hyderabad' },
+    { id: 'pune', name: 'Pune' },
+    { id: 'ahmedabad', name: 'Ahmedabad' },
+    { id: 'jaipur', name: 'Jaipur' },
+    { id: 'lucknow', name: 'Lucknow' },
+    { id: 'shimla', name: 'Shimla' },
+    { id: 'srinagar', name: 'Srinagar' },
+  ];
+
   // Compute national live extremes
   const hottest = observations.length > 0
     ? [...observations].sort((a, b) => b.temperature - a.temperature)[0]
@@ -68,7 +124,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       <div className="absolute bottom-1/4 left-10 w-[500px] h-[500px] rounded-full ambient-orb-violet pointer-events-none blur-3xl -z-10" />
 
       {/* Hero Section */}
-      <section className="relative pt-12 pb-16 px-4 sm:px-6 lg:px-12 max-w-[1720px] mx-auto">
+      <section className="relative pt-12 pb-14 px-4 sm:px-6 lg:px-12 max-w-[1720px] mx-auto">
         <div className="flex flex-col items-center text-center space-y-6 max-w-5xl mx-auto">
           {/* Top Pill Badge */}
           <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-purple-950/60 border border-purple-500/30 text-purple-300 text-xs font-mono shadow-xl backdrop-blur-xl">
@@ -92,8 +148,90 @@ export const HomePage: React.FC<HomePageProps> = ({
             and tectonic early warning feeds into an advanced GIS intelligence cockpit.
           </p>
 
+          {/* Hero Live Search Input Bar */}
+          <div className="relative w-full max-w-xl mx-auto pt-2 z-30">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 absolute left-4 text-purple-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => { if (searchResults.length > 0) setIsSearchOpen(true); }}
+                placeholder="Find any Indian city (e.g. Pune, Patna, Surat, Kochi, Almora)..."
+                className="w-full pl-11 pr-10 py-3.5 rounded-full bg-slate-950/85 border border-purple-500/40 text-sm font-mono text-white placeholder-slate-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 shadow-2xl backdrop-blur-2xl transition"
+              />
+              {isSearching ? (
+                <Loader2 className="w-4 h-4 absolute right-4 text-purple-400 animate-spin" />
+              ) : searchQuery ? (
+                <button
+                  onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                  className="w-4 h-4 absolute right-4 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              ) : null}
+            </div>
+
+            {/* Autocomplete Dropdown */}
+            {isSearchOpen && searchResults.length > 0 && (
+              <div className="absolute top-full mt-2 left-0 right-0 z-50 rounded-2xl bg-[#090d18] border border-purple-500/40 shadow-2xl overflow-hidden backdrop-blur-3xl text-left">
+                <div className="p-2.5 border-b border-white/[0.08] text-[10px] font-mono text-purple-300 uppercase tracking-wider font-semibold">
+                  Instant Synoptic Resolution ({searchResults.length} Matches)
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {searchResults.map((city, idx) => (
+                    <button
+                      key={city.id || idx}
+                      onClick={() => handleSelectCity(city.id)}
+                      className="w-full p-3 text-left hover:bg-purple-950/50 border-b border-white/[0.04] last:border-0 flex items-center justify-between text-xs font-mono transition"
+                    >
+                      <div>
+                        <span className="font-bold text-white block text-sm">{city.name}</span>
+                        <span className="text-[11px] text-slate-400">{city.admin1} &bull; Lat {city.latitude.toFixed(2)}°N</span>
+                      </div>
+                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 font-semibold">
+                        Fly on Map &rarr;
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quick City Telemetry Pills */}
+          <div className="w-full max-w-4xl mx-auto pt-1">
+            <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-purple-400" />
+              <span>Direct Synoptic Access &bull; Tap Any City to Inspect</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {keyCities.map(c => {
+                const obs = observations.find(o => o.location_id === c.id);
+                const isSelected = selectedStationId === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => handleSelectCity(c.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-mono border transition-all flex items-center gap-1.5 backdrop-blur-md active:scale-95 ${
+                      isSelected
+                        ? 'bg-purple-900/70 border-purple-400 text-white shadow-lg shadow-purple-950/50'
+                        : 'bg-slate-900/70 border-white/[0.08] text-slate-300 hover:text-white hover:border-purple-500/40 hover:bg-slate-850'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="font-semibold">{c.name}</span>
+                    <span className="text-purple-300 font-bold">
+                      {obs ? `${obs.temperature.toFixed(1)}°` : '--°'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Action Buttons */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
             <a
               href="#interactive-map"
               onClick={() => soundFx.playClick()}
@@ -127,7 +265,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           {/* Live Micro Status Bar */}
-          <div className="pt-6 flex flex-wrap items-center justify-center gap-4 text-xs font-mono text-slate-400">
+          <div className="pt-4 flex flex-wrap items-center justify-center gap-4 text-xs font-mono text-slate-400">
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
               <span>51 Live Surface Stations</span>
@@ -186,6 +324,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           observations={observations}
           events={events}
           onSelectStation={onSelectStation}
+          selectedStationId={selectedStationId}
         />
       </section>
 
