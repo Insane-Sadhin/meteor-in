@@ -83,42 +83,157 @@ export async function fetchCurrentWeather(): Promise<{
         is_major_station: city.isMajorStation,
       });
 
-      // Quick event inference
-      if (rain >= 15.0) {
+      // Comprehensive Atmospheric Event Inference
+      const wCode = c.weather_code ?? 0;
+      const windSpd = c.wind_speed_10m ?? 0;
+      const windGust = c.wind_gusts_10m ?? 0;
+      const temp = c.temperature_2m ?? 0;
+      const appTemp = c.apparent_temperature ?? temp;
+      const hum = c.relative_humidity_2m ?? 0;
+
+      if ([95, 96, 99].includes(wCode)) {
         activeEvents.push({
           id: idx + 1,
-          event_type: 'Heavy Rain',
+          event_type: 'Severe Thunderstorm',
           location_id: city.id,
           city: city.city,
           state: city.state,
           latitude: city.latitude,
           longitude: city.longitude,
-          detectedAt: new Date().toISOString(),
-          severity: rain >= 35 ? 'SEVERE' : 'HIGH',
+          detected_at: new Date().toISOString(),
+          severity: wCode === 99 ? 'EXTREME' : 'SEVERE',
+          confidence: 0.92,
+          source: 'SYSTEM DETECTION',
+          status: 'ACTIVE',
+          summary: `Active convective thunderstorm cell reported at ${city.city}`,
+          rationale: `WMO code ${wCode} confirmed + convective precipitation rate of ${rain.toFixed(1)} mm/h with active lightning discharges`,
+          affected_radius_km: 35,
+        });
+      } else if (rain >= 15.0) {
+        activeEvents.push({
+          id: idx + 1,
+          event_type: 'Torrential Precipitation',
+          location_id: city.id,
+          city: city.city,
+          state: city.state,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          detected_at: new Date().toISOString(),
+          severity: rain >= 35 ? 'EXTREME' : 'SEVERE',
+          confidence: 0.89,
+          source: 'SYSTEM DETECTION',
+          status: 'ACTIVE',
+          summary: `High-intensity cloudburst rate observed at ${city.city}`,
+          rationale: `Precipitation threshold exceeded (${rain.toFixed(1)} mm/h) with saturated humidity (${hum}%)`,
+          affected_radius_km: 25,
+        });
+      } else if (rain >= 3.0) {
+        activeEvents.push({
+          id: idx + 1,
+          event_type: 'Moderate Rainfall',
+          location_id: city.id,
+          city: city.city,
+          state: city.state,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          detected_at: new Date().toISOString(),
+          severity: 'MODERATE',
+          confidence: 0.84,
+          source: 'SYSTEM DETECTION',
+          status: 'ACTIVE',
+          summary: `Continuous rainfall showers over ${city.city}`,
+          rationale: `Precipitation rate of ${rain.toFixed(1)} mm/h observed with ${hum}% relative humidity`,
+          affected_radius_km: 20,
+        });
+      } else if (temp >= 39.0) {
+        activeEvents.push({
+          id: idx + 1,
+          event_type: 'Heatwave Advisory',
+          location_id: city.id,
+          city: city.city,
+          state: city.state,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          detected_at: new Date().toISOString(),
+          severity: temp >= 43 ? 'EXTREME' : 'HIGH',
+          confidence: 0.91,
+          source: 'SYSTEM DETECTION',
+          status: 'ACTIVE',
+          summary: `Severe thermal heatwave warning across ${city.city}`,
+          rationale: `Dry-bulb temperature (${temp.toFixed(1)}°C) exceeds IMD heatwave threshold`,
+          affected_radius_km: 45,
+        });
+      } else if (appTemp >= 36.0 && hum >= 70) {
+        activeEvents.push({
+          id: idx + 1,
+          event_type: 'Humid Heat Stress',
+          location_id: city.id,
+          city: city.city,
+          state: city.state,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          detected_at: new Date().toISOString(),
+          severity: 'HIGH',
+          confidence: 0.86,
+          source: 'SYSTEM DETECTION',
+          status: 'ACTIVE',
+          summary: `High wet-bulb heat index over ${city.city}`,
+          rationale: `Apparent temperature (${appTemp.toFixed(1)}°C) coupled with high humidity (${hum}%) creates dangerous discomfort index`,
+          affected_radius_km: 30,
+        });
+      } else if (windSpd >= 28 || windGust >= 45) {
+        activeEvents.push({
+          id: idx + 1,
+          event_type: 'High Wind Squall',
+          location_id: city.id,
+          city: city.city,
+          state: city.state,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          detected_at: new Date().toISOString(),
+          severity: 'HIGH',
+          confidence: 0.87,
+          source: 'SYSTEM DETECTION',
+          status: 'ACTIVE',
+          summary: `Strong surface wind gusts recorded in ${city.city}`,
+          rationale: `Surface wind speed reached ${windSpd} km/h with localized gusts up to ${windGust} km/h`,
+          affected_radius_km: 30,
+        });
+      } else if ([45, 48].includes(wCode)) {
+        activeEvents.push({
+          id: idx + 1,
+          event_type: 'Dense Fog & Low Visibility',
+          location_id: city.id,
+          city: city.city,
+          state: city.state,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          detected_at: new Date().toISOString(),
+          severity: 'MODERATE',
+          confidence: 0.85,
+          source: 'SYSTEM DETECTION',
+          status: 'ACTIVE',
+          summary: `Low visibility fog advisory across ${city.city}`,
+          rationale: `Radiation/advection fog detected by surface sensors with high relative humidity (${hum}%)`,
+          affected_radius_km: 25,
+        });
+      } else if (temp <= 12.0 && ['srinagar', 'shimla', 'dehradun', 'gangtok'].includes(city.id)) {
+        activeEvents.push({
+          id: idx + 1,
+          event_type: 'Alpine Cold Wave',
+          location_id: city.id,
+          city: city.city,
+          state: city.state,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          detected_at: new Date().toISOString(),
+          severity: 'MODERATE',
           confidence: 0.88,
           source: 'SYSTEM DETECTION',
           status: 'ACTIVE',
-          summary: `Heavy rain intensity observed at ${city.city}`,
-          rationale: `Precipitation threshold exceeded (${rain.toFixed(1)} mm/h) + saturated humidity (${c.relative_humidity_2m}%)`,
-          affected_radius_km: 25,
-        });
-      } else if (c.temperature_2m >= 40.0) {
-        activeEvents.push({
-          id: idx + 1,
-          event_type: 'Heatwave',
-          location_id: city.id,
-          city: city.city,
-          state: city.state,
-          latitude: city.latitude,
-          longitude: city.longitude,
-          detectedAt: new Date().toISOString(),
-          severity: c.temperature_2m >= 43 ? 'EXTREME' : 'HIGH',
-          confidence: 0.90,
-          source: 'SYSTEM DETECTION',
-          status: 'ACTIVE',
-          summary: `High temperature alert over ${city.city}`,
-          rationale: `Dry-bulb temperature (${c.temperature_2m.toFixed(1)}°C) exceeds seasonal threshold`,
-          affected_radius_km: 40,
+          summary: `Sub-alpine low temperature over ${city.city}`,
+          rationale: `High altitude valley elevation (${city.elevation}m) recording nocturnal chill of ${temp.toFixed(1)}°C`,
+          affected_radius_km: 35,
         });
       }
     });

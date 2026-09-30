@@ -1,30 +1,113 @@
 @import "tailwindcss";
 
 @layer base {
-  body {
-    background-color: #0b1320;
-    color: #e2e8f0;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  :root {
+    --primary: #9047ff;
+    --primary-rgb: 144, 71, 255;
+    --primary-active: #7114ff;
+    --accent-cyan: #00f0ff;
+    --accent-emerald: #00e599;
+    --accent-amber: #ffb800;
+    --accent-rose: #ff3366;
+    --bg-deep: #05070d;
+    --card-surface: rgba(13, 17, 28, 0.72);
+    --border-subtle: rgba(255, 255, 255, 0.08);
   }
 
-  code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+  body {
+    background-color: #05070d;
+    color: #e2e8f0;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
   }
+
+  .font-display {
+    font-family: 'Syne', sans-serif;
+  }
+
+  .font-serif-lux {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
+
+  .font-sans-lux {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  code, pre, .font-mono, .font-mono-lux {
+    font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  }
+}
+
+/* Luxury Glassmorphic Surfaces & Gradient Borders (Emotion Agency Style) */
+.glass-panel {
+  background: rgba(12, 16, 28, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-panel-glow {
+  background: linear-gradient(135deg, rgba(25, 18, 48, 0.6) 0%, rgba(10, 14, 26, 0.8) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(144, 71, 255, 0.2);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.luxury-gradient-text {
+  background: linear-gradient(135deg, #ffffff 20%, #c4b5fd 70%, #9047ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.cyan-gradient-text {
+  background: linear-gradient(135deg, #ffffff 20%, #7dd3fc 60%, #00f0ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.emerald-gradient-text {
+  background: linear-gradient(135deg, #ffffff 20%, #6ee7b7 60%, #00e599 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Pulsing ambient orbs */
+@keyframes ambientGlow {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate(20px, -20px) scale(1.15);
+    opacity: 0.55;
+  }
+}
+
+.ambient-orb-violet {
+  animation: ambientGlow 12s ease-in-out infinite alternate;
+  background: radial-gradient(circle, rgba(144, 71, 255, 0.35) 0%, rgba(144, 71, 255, 0) 70%);
+}
+
+.ambient-orb-cyan {
+  animation: ambientGlow 16s ease-in-out infinite alternate-reverse;
+  background: radial-gradient(circle, rgba(0, 240, 255, 0.25) 0%, rgba(0, 240, 255, 0) 70%);
 }
 
 /* Leaflet GIS customizations */
 .leaflet-container {
-  background-color: #0b1320 !important;
+  background-color: #05070d !important;
   font-family: inherit;
 }
 
 .meteor-popup .leaflet-popup-content-wrapper {
-  background: #0f172a !important;
+  background: #090e1b !important;
   color: #e2e8f0 !important;
-  border: 1px solid #334155 !important;
-  border-radius: 10px !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid rgba(144, 71, 255, 0.3) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 25px 40px -10px rgba(0, 0, 0, 0.8), 0 0 25px rgba(144, 71, 255, 0.2) !important;
   padding: 0 !important;
+  backdrop-filter: blur(16px) !important;
 }
 
 .meteor-popup .leaflet-popup-content {
@@ -33,8 +116,8 @@
 }
 
 .meteor-popup .leaflet-popup-tip {
-  background: #0f172a !important;
-  border: 1px solid #334155 !important;
+  background: #090e1b !important;
+  border: 1px solid rgba(144, 71, 255, 0.3) !important;
 }
 
 .custom-weather-marker {
@@ -53,12 +136,12 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b1320;
+  background: #05070d;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #1e2436;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #9047ff;
 }
