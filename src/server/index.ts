@@ -10,6 +10,7 @@ import { sourceRouter } from './routes/sourceRoutes.ts';
 import { ingestionRouter } from './routes/ingestionRoutes.ts';
 import { healthRouter } from './routes/healthRoutes.ts';
 import { adminRouter } from './routes/adminRoutes.ts';
+import { hazardRouter } from './routes/hazardRoutes.ts';
 import { sseManager } from './services/realtime/sseManager.ts';
 import { ingestionEngine } from './services/ingestion/ingestionEngine.ts';
 
@@ -52,6 +53,8 @@ app.use('/api/sources', sourceRouter);
 app.use('/api/ingestion', ingestionRouter);
 app.use('/api/system/health', healthRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/environmental', hazardRouter);
+app.use('/api/hazards', hazardRouter);
 
 // Basic root ping
 app.get('/api/ping', (req: Request, res: Response) => {

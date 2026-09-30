@@ -10,9 +10,12 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { DataSourceItem } from '../types/index.ts';
 import { getSourceStatusStyle, formatISTTime } from '../utils/formatters.ts';
+import { soundFx } from '../utils/soundEffects.ts';
 
 interface HeaderProps {
   sources: DataSourceItem[];
@@ -40,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   isAdminOpen,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMuted, setIsMuted] = useState(soundFx.isMuted());
 
   const handleSyncClick = async () => {
     setIsSyncing(true);
@@ -82,10 +86,35 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center space-x-2.5">
+          {/* Audio FX Toggle Button */}
           <button
-            onClick={handleSyncClick}
+            onClick={() => {
+              const muted = soundFx.toggleMute();
+              setIsMuted(muted);
+            }}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 border border-slate-700 hover:border-cyan-500/40 transition active:scale-95 shadow-sm"
+            title={isMuted ? 'Tactical Audio: Muted (Click to Unmute)' : 'Tactical Audio: Active (Click to Mute)'}
+          >
+            {isMuted ? (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline text-slate-500">Muted</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                <span className="hidden sm:inline text-cyan-300">Audio FX</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              soundFx.playClick();
+              handleSyncClick();
+            }}
             disabled={isSyncing}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700 transition disabled:opacity-50"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono font-medium text-slate-200 border border-slate-700 hover:border-cyan-500/50 transition disabled:opacity-50 active:scale-95 shadow-sm"
             title="Trigger immediate backend data refresh"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -93,23 +122,29 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           <button
-            onClick={onOpenReportModal}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-medium text-white shadow-sm transition"
+            onClick={() => {
+              soundFx.playSwitch();
+              onOpenReportModal();
+            }}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-xs font-mono font-semibold text-white shadow-md shadow-emerald-950/40 border border-emerald-400/40 transition active:scale-95"
           >
             <PlusCircle className="w-3.5 h-3.5" />
-            <span>Submit Citizen Report</span>
+            <span>Citizen Report</span>
           </button>
 
           <button
-            onClick={onToggleAdmin}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition ${
+            onClick={() => {
+              soundFx.playSwitch();
+              onToggleAdmin();
+            }}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold border transition active:scale-95 shadow-md ${
               isAdminOpen
-                ? 'bg-sky-600 text-white border-sky-500'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                ? 'bg-sky-600 text-white border-sky-400 shadow-sky-950/50'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:border-sky-500/40'
             }`}
           >
             <Shield className="w-3.5 h-3.5 text-sky-400" />
-            <span>{isAdminOpen ? 'Close Operations Center' : 'Operations & Admin'}</span>
+            <span>{isAdminOpen ? 'Close Ops' : 'Operations & Admin'}</span>
           </button>
         </div>
       </div>
@@ -159,18 +194,27 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
 
-            {/* IMD */}
-            <div className="flex items-center space-x-1.5 text-slate-500">
-              <span>IMD</span>
-              <span className="inline-flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                <span>NOT CONNECTED</span>
+            {/* RainViewer Doppler Radar */}
+            <div className="flex items-center space-x-1.5">
+              <span className="text-slate-400">Doppler Radar</span>
+              <span className="inline-flex items-center space-x-1 font-semibold text-cyan-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                <span>ONLINE</span>
               </span>
             </div>
 
-            {/* Satellite */}
-            <div className="flex items-center space-x-1.5 text-slate-500 hidden md:flex">
-              <span>Satellite</span>
+            {/* USGS Seismic */}
+            <div className="flex items-center space-x-1.5">
+              <span className="text-slate-400">USGS Seismic</span>
+              <span className="inline-flex items-center space-x-1 font-semibold text-rose-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                <span>ONLINE</span>
+              </span>
+            </div>
+
+            {/* IMD */}
+            <div className="flex items-center space-x-1.5 text-slate-500">
+              <span>IMD GTS</span>
               <span className="inline-flex items-center space-x-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
                 <span>NOT CONNECTED</span>

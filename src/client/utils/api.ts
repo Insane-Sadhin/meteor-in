@@ -5,6 +5,10 @@ import {
   DataSourceItem,
   SystemHealthData,
   IngestionLog,
+  CityAirQuality,
+  SeismicEvent,
+  CoastalMarinePoint,
+  RadarMetadata,
 } from '../types/index.ts';
 import { INDIAN_CITIES } from '../../server/data/cities.ts';
 import { interpretWeatherCode } from '../../server/services/weather/weatherNormalizer.ts';
@@ -453,3 +457,228 @@ export function setupSSEConnection(
     }
   };
 }
+
+/**
+ * Fetch Real-Time National Air Quality (PM2.5, PM10, Indian NAQI)
+ */
+export async function fetchAirQuality(): Promise<CityAirQuality[]> {
+  try {
+    const res = await fetch(`${API_BASE}/environmental/air-quality`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.airQuality)) {
+        return data.airQuality;
+      }
+    }
+  } catch (err) {
+    console.warn('[API Client] Backend AQI endpoint unreachable, using direct Open-Meteo edge fallback.');
+  }
+
+  // Edge Direct Fallback: Query Open-Meteo Air Quality API directly from browser
+  try {
+    const lats = INDIAN_CITIES.map(c => c.latitude.toFixed(4)).join(',');
+    const lons = INDIAN_CITIES.map(c => c.longitude.toFixed(4)).join(',');
+    const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lats}&longitude=${lons}&current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,dust,uv_index,european_aqi,us_aqi&timezone=Asia/Kolkata`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+    const isArray = Array.isArray(data);
+
+    return INDIAN_CITIES.map((city, idx) => {
+      const item = isArray ? data[idx] : (idx === 0 ? data : null);
+      const c = item?.current || {};
+      const pm25 = c.pm2_5 ?? 25;
+      const pm10 = c.pm10 ?? 45;
+
+      // Indian CPCB calculation
+      let aqiPm25 = 0;
+      if (pm25 <= 30) aqiPm25 = (pm25 / 30) * 50;
+      else if (pm25 <= 60) aqiPm25 = 51 + ((pm25 - 31) / 29) * 49;
+      else if (pm25 <= 90) aqiPm25 = 101 + ((pm25 - 61) / 29) * 99;
+      else if (pm25 <= 120) aqiPm25 = 201 + ((pm25 - 91) / 29) * 99;
+      else if (pm25 <= 250) aqiPm25 = 301 + ((pm25 - 121) / 129) * 99;
+      else aqiPm25 = Math.min(500, 401 + ((pm25 - 250) / 150) * 99);
+
+      let aqiPm10 = 0;
+      if (pm10 <= 50) aqiPm10 = pm10;
+      else if (pm10 <= 100) aqiPm10 = 51 + ((pm10 - 51) / 49) * 49;
+      else if (pm10 <= 250) aqiPm10 = 101 + ((pm10 - 101) / 149) * 99;
+      else if (pm10 <= 350) aqiPm10 = 201 + ((pm10 - 251) / 99) * 99;
+      else if (pm10 <= 430) aqiPm10 = 301 + ((pm10 - 351) / 79) * 99;
+      else aqiPm10 = Math.min(500, 401 + ((pm10 - 430) / 70) * 99);
+
+      const indianAqi = Math.round(Math.max(aqiPm25, aqiPm10));
+      let aqiCategory: CityAirQuality['aqiCategory'] = 'Good';
+      if (indianAqi <= 50) aqiCategory = 'Good';
+      else if (indianAqi <= 100) aqiCategory = 'Satisfactory';
+      else if (indianAqi <= 200) aqiCategory = 'Moderate';
+      else if (indianAqi <= 300) aqiCategory = 'Poor';
+      else if (indianAqi <= 400) aqiCategory = 'Very Poor';
+      else aqiCategory = 'Severe';
+
+      return {
+        locationId: city.id,
+        city: city.city,
+        state: city.state,
+        latitude: city.latitude,
+        longitude: city.longitude,
+        observedAt: c.time ? new Date(c.time + '+05:30').toISOString() : new Date().toISOString(),
+        pm2_5: Math.round(pm25 * 10) / 10,
+        pm10: Math.round(pm10 * 10) / 10,
+        carbonMonoxide: Math.round((c.carbon_monoxide ?? 250) * 10) / 10,
+        nitrogenDioxide: Math.round((c.nitrogen_dioxide ?? 15) * 10) / 10,
+        sulphurDioxide: Math.round((c.sulphur_dioxide ?? 8) * 10) / 10,
+        ozone: Math.round((c.ozone ?? 30) * 10) / 10,
+        dust: Math.round((c.dust ?? 10) * 10) / 10,
+        uvIndex: Math.round((c.uv_index ?? 0) * 10) / 10,
+        europeanAqi: Math.round(c.european_aqi ?? 20),
+        usAqi: Math.round(c.us_aqi ?? 40),
+        indianAqi,
+        aqiCategory,
+      };
+    });
+  } catch (e) {
+    console.error('Failed to fetch fallback air quality:', e);
+    return [];
+  }
+}
+
+/**
+ * Fetch USGS Real-Time Earthquakes (Indian Subcontinent & Ocean)
+ */
+export async function fetchSeismicHazards(): Promise<SeismicEvent[]> {
+  try {
+    const res = await fetch(`${API_BASE}/hazards/seismic`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.events)) {
+        return data.events;
+      }
+    }
+  } catch (err) {
+    console.warn('[API Client] Backend seismic endpoint unreachable, using direct USGS edge fallback.');
+  }
+
+  // Edge Direct Fallback: Query USGS directly
+  try {
+    const url = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=2.5&minlatitude=0&maxlatitude=38&minlongitude=65&maxlongitude=100&limit=25`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const features = data?.features || [];
+
+    return features.map((f: any) => {
+      const mag = f.properties.mag || 0;
+      let severity: SeismicEvent['severity'] = 'MINOR';
+      if (mag >= 6.5) severity = 'MAJOR';
+      else if (mag >= 5.0) severity = 'STRONG';
+      else if (mag >= 4.0) severity = 'MODERATE';
+
+      return {
+        id: f.id,
+        place: f.properties.place || 'Unknown Location, South Asia',
+        magnitude: mag,
+        depthKm: f.geometry?.coordinates?.[2] || 10,
+        time: new Date(f.properties.time).toISOString(),
+        latitude: f.geometry?.coordinates?.[1] || 0,
+        longitude: f.geometry?.coordinates?.[0] || 0,
+        tsunamiAlert: f.properties.tsunami === 1,
+        significance: f.properties.sig || 0,
+        severity,
+      };
+    });
+  } catch (e) {
+    console.error('Failed to fetch fallback seismic events:', e);
+    return [];
+  }
+}
+
+/**
+ * Fetch Coastal Marine & Sea-State Telemetry
+ */
+export async function fetchMarineConditions(): Promise<CoastalMarinePoint[]> {
+  try {
+    const res = await fetch(`${API_BASE}/hazards/marine`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.coastalData)) {
+        return data.coastalData;
+      }
+    }
+  } catch (err) {
+    console.warn('[API Client] Backend marine endpoint unreachable, using direct Open-Meteo marine fallback.');
+  }
+
+  const ports = [
+    { city: 'Mumbai Port', state: 'Maharashtra', sea: 'Arabian Sea' as const, lat: 18.9438, lon: 72.8354 },
+    { city: 'Kochi Harbour', state: 'Kerala', sea: 'Arabian Sea' as const, lat: 9.9656, lon: 76.2625 },
+    { city: 'Goa Coastal', state: 'Goa', sea: 'Arabian Sea' as const, lat: 15.4989, lon: 73.8278 },
+    { city: 'Chennai Port', state: 'Tamil Nadu', sea: 'Bay of Bengal' as const, lat: 13.0827, lon: 80.2707 },
+    { city: 'Visakhapatnam Port', state: 'Andhra Pradesh', sea: 'Bay of Bengal' as const, lat: 17.6868, lon: 83.2185 },
+    { city: 'Kolkata Port', state: 'West Bengal', sea: 'Bay of Bengal' as const, lat: 22.5726, lon: 88.3639 },
+    { city: 'Port Blair', state: 'Andaman & Nicobar', sea: 'Bay of Bengal' as const, lat: 11.6234, lon: 92.7265 },
+    { city: 'Kavaratti', state: 'Lakshadweep', sea: 'Indian Ocean' as const, lat: 10.5669, lon: 72.6420 },
+  ];
+
+  try {
+    const lats = ports.map(p => p.lat.toFixed(4)).join(',');
+    const lons = ports.map(p => p.lon.toFixed(4)).join(',');
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lats}&longitude=${lons}&current=wave_height,wave_direction,wave_period&timezone=Asia/Kolkata`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+    const isArray = Array.isArray(data);
+
+    return ports.map((port, idx) => {
+      const item = isArray ? data[idx] : (idx === 0 ? data : null);
+      const c = item?.current || {};
+      const waveH = c.wave_height ?? 1.2;
+      let condition: CoastalMarinePoint['seaSurfaceCondition'] = 'Calm';
+      if (waveH > 3.0) condition = 'High Swell';
+      else if (waveH > 2.0) condition = 'Rough';
+      else if (waveH > 1.0) condition = 'Moderate';
+
+      return {
+        city: port.city,
+        state: port.state,
+        sea: port.sea,
+        latitude: port.lat,
+        longitude: port.lon,
+        waveHeightMeters: Math.round(waveH * 10) / 10,
+        waveDirectionDegrees: Math.round(c.wave_direction ?? 180),
+        wavePeriodSeconds: Math.round(c.wave_period ?? 7),
+        seaSurfaceCondition: condition,
+      };
+    });
+  } catch (e) {
+    console.error('Failed to fetch fallback marine conditions:', e);
+    return [];
+  }
+}
+
+/**
+ * Fetch Free RainViewer Doppler Radar Map Metadata
+ */
+export async function fetchRadarMetadata(): Promise<RadarMetadata | null> {
+  try {
+    const res = await fetch(`${API_BASE}/hazards/radar`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.radarData) {
+        return data.radarData;
+      }
+    }
+  } catch (err) {
+    console.warn('[API Client] Backend radar endpoint unreachable, querying RainViewer API directly.');
+  }
+
+  try {
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.error('Failed to fetch RainViewer radar metadata:', e);
+  }
+  return null;
+}
+

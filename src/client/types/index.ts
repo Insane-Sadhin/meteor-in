@@ -128,3 +128,66 @@ export interface SystemHealthData {
   };
   apiAvailability: Record<string, string>;
 }
+
+export interface CityAirQuality {
+  locationId: string;
+  city: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+  observedAt: string;
+  pm2_5: number;
+  pm10: number;
+  carbonMonoxide: number;
+  nitrogenDioxide: number;
+  sulphurDioxide: number;
+  ozone: number;
+  dust: number;
+  uvIndex: number;
+  europeanAqi: number;
+  usAqi: number;
+  indianAqi: number;
+  aqiCategory: 'Good' | 'Satisfactory' | 'Moderate' | 'Poor' | 'Very Poor' | 'Severe';
+}
+
+export interface SeismicEvent {
+  id: string;
+  place: string;
+  magnitude: number;
+  depthKm: number;
+  time: string;
+  latitude: number;
+  longitude: number;
+  tsunamiAlert: boolean;
+  significance: number;
+  severity: 'MINOR' | 'MODERATE' | 'STRONG' | 'MAJOR';
+}
+
+export interface CoastalMarinePoint {
+  city: string;
+  state: string;
+  sea: 'Arabian Sea' | 'Bay of Bengal' | 'Indian Ocean';
+  latitude: number;
+  longitude: number;
+  waveHeightMeters: number;
+  waveDirectionDegrees: number;
+  wavePeriodSeconds: number;
+  seaSurfaceCondition: 'Calm' | 'Moderate' | 'Rough' | 'High Swell';
+}
+
+export interface RadarFrame {
+  time: number;
+  path: string;
+}
+
+export interface RadarMetadata {
+  host: string;
+  radar: {
+    past: RadarFrame[];
+    nowcast: RadarFrame[];
+  };
+  satellite: {
+    infrared: RadarFrame[];
+  };
+}
+
